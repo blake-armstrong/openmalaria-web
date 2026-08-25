@@ -5,20 +5,22 @@
   "type": "module",
   "description": "Web frontend for the OpenMalaria simulator (openmalaria-wasm)",
   "scripts": {
-    "copy-wasm": "node scripts/copy-wasm.mjs",
-    "predev": "npm run copy-wasm",
     "dev": "vite",
-    "prebuild": "npm run copy-wasm",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "fetch:pyodide": "bash scripts/fetch-pyodide-assets.sh"
   },
   "dependencies": {
-    "openmalaria-wasm": "file:../openmalaria-fork/js",
+    "@codemirror/lang-python": "^6.2.1",
+    "@codemirror/lang-xml": "^6.1.0",
+    "@codemirror/lint": "^6.9.7",
+    "@uiw/react-codemirror": "^4.23.6",
+    "openmalaria-wasm": "file:../openmalaria-wasm-port/js",
+    "pyodide": "^314.0.5",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1",
-    "recharts": "^2.12.7"
+    "react-dom": "^18.3.1"
   },
   "devDependencies": {
     "@types/react": "^18.3.3",

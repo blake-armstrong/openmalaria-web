@@ -1,10 +1,17 @@
-import { useMemo, useState } from 'react';
-import type { RunResult } from '../lib/runScenario';
+import { lazy, Suspense, useMemo } from 'react';
 import { parseSurvey, measuresPresent, surveysPresent } from '../lib/parseSurvey';
 import { parseCts } from '../lib/parseCts';
-import { MeasureChart } from './MeasureChart';
-import { CtsChart } from './CtsChart';
-import { ResultsTable } from './ResultsTable';
+
+// Charts/Table/Explore are all rendered via Pyodide (pandas + matplotlib),
+// which pulls in ~32MB of runtime + packages; load it only once a full run
+// actually needs displaying, not with the rest of the app.
+const PyResults = lazy(() => import('./PyResults').then((m) => ({ default: m.PyResults })));
+
+// A full (non-validateOnly) run always produces output.txt.
+interface FullRunResult {
+  output: string;
+  cts?: string;
+}
 
 function StatTile({ label, value }: { label: string; value: string | number }) {
   return (
@@ -15,10 +22,9 @@ function StatTile({ label, value }: { label: string; value: string | number }) {
   );
 }
 
-export function ResultsView({ result, scenarioName, runMs }: { result: RunResult; scenarioName: string; runMs: number }) {
+export function ResultsView({ result, scenarioName, runMs }: { result: FullRunResult; scenarioName: string; runMs: number }) {
   const rows = useMemo(() => parseSurvey(result.output), [result.output]);
   const cts = useMemo(() => (result.cts ? parseCts(result.cts) : null), [result.cts]);
-  const [tab, setTab] = useState<'charts' | 'table'>('charts');
 
   const nSurveys = useMemo(() => surveysPresent(rows).length, [rows]);
   const nMeasures = useMemo(() => measuresPresent(rows).length, [rows]);
@@ -30,14 +36,6 @@ export function ResultsView({ result, scenarioName, runMs }: { result: RunResult
           <p className="eyebrow">Results</p>
           <h2 className="results-title">{scenarioName}</h2>
         </div>
-        <div className="tabs" role="tablist">
-          <button role="tab" aria-selected={tab === 'charts'} className={`tab ${tab === 'charts' ? 'tab-on' : ''}`} onClick={() => setTab('charts')}>
-            Charts
-          </button>
-          <button role="tab" aria-selected={tab === 'table'} className={`tab ${tab === 'table' ? 'tab-on' : ''}`} onClick={() => setTab('table')}>
-            Table
-          </button>
-        </div>
       </header>
 
       <div className="stat-row">
@@ -47,14 +45,9 @@ export function ResultsView({ result, scenarioName, runMs }: { result: RunResult
         <StatTile label="Run time" value={`${(runMs / 1000).toFixed(1)}s`} />
       </div>
 
-      {tab === 'charts' ? (
-        <div className="stack">
-          <MeasureChart rows={rows} />
-          {cts && cts.rows.length > 0 && <CtsChart table={cts} />}
-        </div>
-      ) : (
-        <ResultsTable rows={rows} rawOutput={result.output} />
-      )}
+      <Suspense fallback={<p className="note">Loading Python (pandas + matplotlib)…</p>}>
+        <PyResults rows={rows} cts={cts} rawOutput={result.output} />
+      </Suspense>
     </div>
   );
 }

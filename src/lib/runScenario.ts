@@ -1,6 +1,6 @@
-// Main-thread wrapper around the OpenMalaria worker. Spawns a fresh worker per
-// run (matching the package's one-instance-per-call model), streams stderr lines
-// back via onStderr, and resolves with the parsed-ready result strings.
+// Main-thread wrapper around the OpenMalaria worker. Spawns a fresh worker
+// per run (matching openmalaria-wasm's one-instance-per-call model), streams
+// stderr lines back via onStderr, and resolves with the raw output strings.
 
 import OMWorker from '../worker/om.worker.ts?worker';
 import type { RunRequest, WorkerMessage } from '../worker/protocol';
@@ -17,24 +17,16 @@ export class OpenMalariaError extends Error {
 }
 
 export interface RunResult {
-  output: string;
+  output?: string;
   cts?: string;
   warnings: string[];
 }
 
 export interface RunOptions {
+  validateOnly?: boolean;
   onStderr?: (line: string) => void;
   onStdout?: (line: string) => void;
   signal?: AbortSignal;
-}
-
-/** Resolve the public/wasm asset URLs against the current document base. */
-function assetUrls() {
-  const base = new URL(import.meta.env.BASE_URL, document.baseURI);
-  return {
-    glueUrl: new URL('wasm/openMalaria.mjs', base).href,
-    wasmUrl: new URL('wasm/openMalaria.wasm', base).href,
-  };
 }
 
 export function runScenario(xml: string, opts: RunOptions = {}): Promise<RunResult> {
@@ -44,6 +36,7 @@ export function runScenario(xml: string, opts: RunOptions = {}): Promise<RunResu
       return;
     }
 
+    const id = crypto.randomUUID();
     const worker = new OMWorker();
     const cleanup = () => {
       worker.terminate();
@@ -64,6 +57,7 @@ export function runScenario(xml: string, opts: RunOptions = {}): Promise<RunResu
 
     worker.onmessage = (e: MessageEvent<WorkerMessage>) => {
       const msg = e.data;
+      if (msg.id !== id) return; // stale reply from a superseded run
       switch (msg.type) {
         case 'stderr':
           opts.onStderr?.(msg.line);
@@ -86,7 +80,7 @@ export function runScenario(xml: string, opts: RunOptions = {}): Promise<RunResu
       reject(new OpenMalariaError(e.message || 'Worker error', undefined, []));
     };
 
-    const req: RunRequest = { type: 'run', xml, ...assetUrls() };
+    const req: RunRequest = { type: 'run', id, xml, validateOnly: opts.validateOnly ?? false };
     worker.postMessage(req);
   });
 }
